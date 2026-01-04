@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>User Cabinet</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css">
+  <style>
+    body{font-family:Arial,sans-serif; margin:0;}
+    header{display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid #eee; gap:10px; flex-wrap:wrap;}
+    .muted{color:#666;}
+    .btn{padding:10px 14px; cursor:pointer; border:1px solid #ddd; background:#fff; border-radius:10px;}
+    .btn.primary{border-color:#333;}
+    main{padding:16px;}
+    .card{border:1px solid #ddd; border-radius:12px; padding:12px;}
+    #calendar{min-height:680px;}
+    dialog{border:none; border-radius:14px; padding:0; width:min(720px, 92vw);}
+    dialog::backdrop{background:rgba(0,0,0,.35);}
+    .modal-head{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid #eee;}
+    .modal-body{padding:12px 14px;}
+    .notif{border:1px solid #eee; border-radius:12px; padding:10px; margin-top:10px;}
+    .actions{display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;}
+    .err{color:#b00020; white-space:pre-wrap; margin-top:10px;}
+    small{color:#666;}
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <strong>User kabinet</strong>
+    <small id="me" class="muted"></small>
+  </div>
+  <div class="actions">
+    <button class="btn" id="btnNotifs">🔔 Bildirishnomalar</button>
+    <button class="btn" id="btnDetail" disabled>ℹ️ Event detail</button>
+    <a id="adminLink" class="btn" style="text-decoration:none; display:none;" href="admin.html">Admin panel</a>
+    <button class="btn" onclick="logout()">Chiqish</button>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <h3>Mening Calendar’im</h3>
+    <div id="calendar"></div>
+    <p><small>Eventni bosganingizda detail modal ochiladi. Taklif xabarlari “Bildirishnomalar”da.</small></p>
+    <div id="calErr" class="err"></div>
+  </div>
+</main>
+
+<!-- Notifications modal -->
+<dialog id="dlgNotifs">
+  <div class="modal-head">
+    <b>Bildirishnomalar (takliflar)</b>
+    <button class="btn" onclick="document.getElementById('dlgNotifs').close()">✖</button>
+  </div>
+  <div class="modal-body">
+    <div id="notifs"><small>Yuklanmoqda...</small></div>
+    <div id="n_err" class="err"></div>
+  </div>
+</dialog>
+
+<!-- Detail modal -->
+<dialog id="dlgDetail">
+  <div class="modal-head">
+    <b>Event tafsiloti</b>
+    <button class="btn" onclick="document.getElementById('dlgDetail').close()">✖</button>
+  </div>
+  <div class="modal-body">
+    <div id="detail"><small>Calendar’dan event tanlang.</small></div>
+    <div class="actions" id="actions" style="display:none;">
+      <button class="btn primary" id="confirmBtn">✅ Tasdiqlash</button>
+      <button class="btn" id="rejectBtn">❌ Rad etish</button>
+    </div>
+    <div id="d_err" class="err"></div>
+  </div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script src="assets/app.js"></script>
+<script>
+requireLogin();
+const me = getUser();
+document.getElementById("me").textContent = " — " + (me?.email || "");
+if (me?.role === "admin") document.getElementById("adminLink").style.display = "inline";
+
+const dlgNotifs = document.getElementById("dlgNotifs");
+const dlgDetail = document.getElementById("dlgDetail");
+
+document.getElementById("btnNotifs").onclick = async () => {
+  await refreshNotifications();
+  dlgNotifs.showModal();
+};
+
+let selectedEventId = null;
+document.getElementById("btnDetail").onclick = () => {
+  if (!selectedEventId) return;
+  dlgDetail.showModal();
+};
+
+let calendar;
+
+function esc(s){ return (s||"").toString().replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+
+async function refreshCalendar(){
+  const calErr = document.getElementById("calErr");
+  calErr.textContent = "";
+  try{
+    const r = await api("/events/list");
+    calendar.removeAllEvents();
+    for (const ev of r.events) calendar.addEvent(ev);
+  }catch(e){
+    calErr.textContent = "Eventlarni yuklab bo‘lmadi. " + (e.error || "");
+  }
+}
+
+async function refreshNotifications(){
+  const box = document.getElementById("notifs");
+  const err = document.getElementById("n_err");
+  err.textContent = "";
+  box.innerHTML = "<small>Yuklanmoqda...</small>";
+  try{
+    const r = await api("/notifications/list");
+    box.innerHTML = "";
+    if (!r.notifications.length){
+      box.innerHTML = "<small>Bildirishnoma yo‘q.</small>";
+      return;
+    }
+    for (const n of r.notifications){
+      const div = document.createElement("div");
+      div.className = "notif";
+      div.innerHTML = `
+        <div><b>${esc(n.event_name || "Xabar")}</b> <small class="muted">${esc(n.created_at)}</small></div>
+        <div class="muted">${esc(n.message)}</div>
+        <div style="margin-top:8px;">
+          <small>Status: ${n.is_read ? "o‘qilgan" : "yangi"}</small>
+          <button class="btn" style="float:right;" data-id="${n.id}">O‘qildi</button>
+        </div>
+      `;
+      div.querySelector("button").onclick = async (e) => {
+        const id = parseInt(e.target.getAttribute("data-id"), 10);
+        await api("/notifications/mark_read", {method:"POST", body:{notification_id:id}});
+        await refreshNotifications();
+      };
+      box.appendChild(div);
+    }
+  }catch(e){
+    err.textContent = e.error ? (e.error + (e.message ? ("\n" + e.message) : "")) : JSON.stringify(e);
+    box.innerHTML = "<small>Xatolik.</small>";
+  }
+}
+
+function showDetail(ev){
+  const d = document.getElementById("detail");
+  const p = ev.extendedProps || {};
+  d.innerHTML = `
+    <div><b>${esc(ev.title)}</b></div>
+    <div class="muted">${esc(ev.startStr)}${ev.endStr ? (" — " + esc(ev.endStr)) : ""}</div>
+    <div style="margin-top:8px;"><b>Joy:</b> ${esc(p.location || "")}</div>
+    <div style="margin-top:8px;"><b>Masalalar:</b><div>${esc(p.agenda || "")}</div></div>
+    <div style="margin-top:8px;"><b>Holat:</b> ${esc(p.status || "pending")}</div>
+  `;
+  selectedEventId = ev.id;
+  document.getElementById("actions").style.display = "flex";
+  document.getElementById("btnDetail").disabled = false;
+}
+
+async function respond(status){
+  const err = document.getElementById("d_err");
+  err.textContent = "";
+  try{
+    if (!selectedEventId) return;
+    await api("/event/respond", {method:"POST", body:{event_id: parseInt(selectedEventId,10), status}});
+    await refreshCalendar();
+    await refreshNotifications();
+  }catch(e){
+    err.textContent = e.error ? (e.error + (e.message ? ("\n" + e.message) : "")) : JSON.stringify(e);
+  }
+}
+
+document.getElementById("confirmBtn").onclick = () => respond("confirmed");
+document.getElementById("rejectBtn").onclick = () => respond("rejected");
+
+document.addEventListener("DOMContentLoaded", async () => {
+  const calEl = document.getElementById("calendar");
+  calendar = new FullCalendar.Calendar(calEl, {
+    initialView: "dayGridMonth",
+    height: "auto",
+    eventClick: (info) => {
+      showDetail(info.event);
+      dlgDetail.showModal();
+    }
+  });
+  calendar.render();
+
+  await refreshCalendar();
+});
+</script>
+</body>
+</html>

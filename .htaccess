@@ -1,0 +1,13 @@
+Options -Indexes
+DirectoryIndex index.php index.html
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+# /login and /login.html -> /public/user.html (Variant A)
+RewriteRule ^login/?$ /public/login.html [L,R=302]
+RewriteRule ^login\.html$ /public/user.html [L,R=302]
+
+# Optional nice API routes
+RewriteRule ^api/?(.*)$ /public/api/index.php [L,QSA]
+</IfModule>

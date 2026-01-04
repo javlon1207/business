@@ -1,0 +1,8 @@
+Options -Indexes
+DirectoryIndex login.html index.html
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule ^api/?$ api/index.php [L]
+RewriteRule ^api/(.*)$ api/index.php [L,QSA]
+</IfModule>

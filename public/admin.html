@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css">
+  <style>
+    body{font-family:Arial,sans-serif; margin:0;}
+    header{display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid #eee; gap:10px; flex-wrap:wrap;}
+    .muted{color:#666;}
+    .btn{padding:10px 14px; cursor:pointer; border:1px solid #ddd; background:#fff; border-radius:10px;}
+    .btn.primary{border-color:#333;}
+    main{padding:16px;}
+    .card{border:1px solid #ddd; border-radius:12px; padding:12px;}
+    #calendar{min-height:680px;}
+    dialog{border:none; border-radius:14px; padding:0; width:min(720px, 92vw);}
+    dialog::backdrop{background:rgba(0,0,0,.35);}
+    .modal-head{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid #eee;}
+    .modal-body{padding:12px 14px;}
+    label{display:block; margin-top:10px;}
+    input, textarea, select{width:100%; padding:10px; margin-top:6px; box-sizing:border-box;}
+    .row{display:flex; gap:10px;}
+    .row>div{flex:1;}
+    .err{color:#b00020; white-space:pre-wrap; margin-top:10px;}
+    .ok{color:#2e7d32; white-space:pre-wrap; margin-top:10px;}
+    .list{max-height:240px; overflow:auto; border:1px solid #eee; border-radius:10px; padding:8px; margin-top:6px;}
+    .pill{display:inline-block; padding:4px 8px; border:1px solid #ddd; border-radius:999px; margin-right:6px; margin-top:6px;}
+    .status-pending{border-color:#999;}
+    .status-confirmed{border-color:#2e7d32;}
+    .status-rejected{border-color:#b00020;}
+    .toolbar{display:flex; gap:8px; flex-wrap:wrap;}
+    small{color:#666;}
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <strong>Admin panel</strong>
+    <small id="me" class="muted"></small>
+  </div>
+  <div class="toolbar">
+    <button class="btn" id="btnUser">👤 Create user</button>
+    <button class="btn primary" id="btnEvent">📅 Create event</button>
+    <button class="btn" id="btnDetail" disabled>ℹ️ Event detail</button>
+    <a class="btn" style="text-decoration:none; display:inline-block;" href="admin_reports.html">📊 Reports</a>
+    <a class="btn" style="text-decoration:none; display:inline-block;" href="user.html">👁️ User ko‘rinishi</a>
+    <button class="btn" onclick="logout()">Chiqish</button>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <h3>Calendar</h3>
+    <div id="calendar"></div>
+    <p><small>Admin barcha eventlarni ko‘radi. Event ustiga bosilsa, “Event detail” tugmasi aktiv bo‘ladi.</small></p>
+    <div id="calErr" class="err"></div>
+  </div>
+</main>
+
+<!-- USER MODAL -->
+<dialog id="dlgUser">
+  <div class="modal-head">
+    <b>Foydalanuvchi yaratish (default parol: 123)</b>
+    <button class="btn" onclick="document.getElementById('dlgUser').close()">✖</button>
+  </div>
+  <div class="modal-body">
+    <div class="row">
+      <div>
+        <label>Familiya</label>
+        <input id="u_last" />
+      </div>
+      <div>
+        <label>Ism</label>
+        <input id="u_first" />
+      </div>
+    </div>
+    <label>Lavozim</label>
+    <input id="u_pos" />
+    <label>Email</label>
+    <input id="u_email" />
+    <label>Rol</label>
+    <select id="u_role">
+      <option value="user">user</option>
+      <option value="admin">admin</option>
+    </select>
+    <button class="btn primary" id="createUserBtn">Create user</button>
+    <div id="u_msg"></div>
+  </div>
+</dialog>
+
+<!-- EVENT MODAL -->
+<dialog id="dlgEvent">
+  <div class="modal-head">
+    <b>Event yaratish</b>
+    <button class="btn" onclick="document.getElementById('dlgEvent').close()">✖</button>
+  </div>
+  <div class="modal-body">
+    <label>Event nomi</label>
+    <input id="e_name" />
+    <label>Boshlanish vaqti</label>
+    <input id="e_start" type="datetime-local" />
+    <label>Tugash vaqti (ixtiyoriy)</label>
+    <input id="e_end" type="datetime-local" />
+    <label>Joy</label>
+    <input id="e_loc" />
+    <label>Ko‘riladigan masalalar (agenda)</label>
+    <textarea id="e_agenda" rows="4"></textarea>
+
+    <label>Qatnashchilar (tanlang)</label>
+    <div class="list" id="usersBox"><small>Yuklanmoqda...</small></div>
+
+    <button class="btn primary" id="createEventBtn">Create event</button>
+    <div id="e_msg"></div>
+  </div>
+</dialog>
+
+<!-- DETAIL MODAL -->
+<dialog id="dlgDetail">
+  <div class="modal-head">
+    <b>Event tafsiloti</b>
+    <button class="btn" onclick="document.getElementById('dlgDetail').close()">✖</button>
+  </div>
+  <div class="modal-body" id="eventDetail">
+    <small>Event tanlang.</small>
+  </div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script src="assets/app.js"></script>
+<script>
+requireLogin("admin");
+document.getElementById("me").textContent = " — " + (getUser()?.email || "");
+
+const dlgUser = document.getElementById("dlgUser");
+const dlgEvent = document.getElementById("dlgEvent");
+const dlgDetail = document.getElementById("dlgDetail");
+
+document.getElementById("btnUser").onclick = () => { document.getElementById("u_msg").textContent=""; dlgUser.showModal(); };
+document.getElementById("btnEvent").onclick = async () => { document.getElementById("e_msg").textContent=""; await refreshUsers(); dlgEvent.showModal(); };
+
+let selectedEventId = null;
+document.getElementById("btnDetail").onclick = async () => {
+  if (!selectedEventId) return;
+  await showEventDetail(selectedEventId);
+  dlgDetail.showModal();
+};
+
+function esc(s){ return (s||"").toString().replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+
+async function refreshUsers(){
+  const box = document.getElementById("usersBox");
+  box.innerHTML = "<small>Yuklanmoqda...</small>";
+  try{
+    const r = await api("/admin/users_list");
+    box.innerHTML = "";
+    for (const u of r.users){
+      const div = document.createElement("div");
+      div.innerHTML = `
+        <label style="display:flex; align-items:flex-start; gap:8px; margin:6px 0;">
+          <input type="checkbox" value="${u.id}" style="margin-top:4px;">
+          <span>${esc(u.last_name)} ${esc(u.first_name)} — <small>${esc(u.position)} (${esc(u.email)})</small></span>
+        </label>`;
+      box.appendChild(div);
+    }
+  }catch(e){
+    box.innerHTML = `<div class="err">${esc(e.error || "Load users failed")}</div>`;
+  }
+}
+
+async function refreshCalendar(){
+  const calErr = document.getElementById("calErr");
+  calErr.textContent = "";
+  try{
+    const r = await api("/events/list");
+    calendar.removeAllEvents();
+    for (const ev of r.events) calendar.addEvent(ev);
+  }catch(e){
+    calErr.textContent = "Eventlarni yuklab bo‘lmadi. API ishlayotganini tekshiring. " + (e.error || "");
+  }
+}
+
+async function showEventDetail(eventId){
+  const wrap = document.getElementById("eventDetail");
+  wrap.innerHTML = "<small>Yuklanmoqda...</small>";
+  try{
+    const r = await api("/admin/event_detail?event_id=" + encodeURIComponent(eventId));
+    const ev = r.event;
+    const ps = r.participants;
+
+    const pills = ps.map(p => {
+      const cls = "pill status-" + p.status;
+      return `<span class="${cls}">${esc(p.last_name)} ${esc(p.first_name)} — <small>${esc(p.position)}</small> | <b>${esc(p.status)}</b></span>`;
+    }).join("");
+
+    wrap.innerHTML = `
+      <div><b>${esc(ev.event_name)}</b></div>
+      <div class="muted">${esc(ev.start_time)}${ev.end_time ? (" — " + esc(ev.end_time)) : ""} | ${esc(ev.location || "")}</div>
+      <div style="margin-top:8px;"><b>Masalalar:</b><div>${esc(ev.agenda||"")}</div></div>
+      <div style="margin-top:10px;"><b>Qatnashchilar holati:</b></div>
+      <div style="margin-top:6px;">${pills || "<small>Yo‘q</small>"}</div>
+    `;
+  }catch(e){
+    wrap.innerHTML = `<div class="err">${esc(e.error || "Load failed")}</div>`;
+  }
+}
+
+document.getElementById("createUserBtn").onclick = async () => {
+  const msg = document.getElementById("u_msg");
+  msg.className = "";
+  msg.textContent = "";
+  try{
+    const body = {
+      last_name: document.getElementById("u_last").value.trim(),
+      first_name: document.getElementById("u_first").value.trim(),
+      position: document.getElementById("u_pos").value.trim(),
+      email: document.getElementById("u_email").value.trim(),
+      role: document.getElementById("u_role").value
+    };
+    const r = await api("/admin/create_user", {method:"POST", body});
+    msg.className = "ok";
+    msg.textContent = "OK. user_id=" + r.user_id + " (password: " + r.default_password + ")";
+    await refreshUsers();
+  }catch(e){
+    msg.className = "err";
+    msg.textContent = e.error ? (e.error + (e.message ? ("\n" + e.message) : "")) : JSON.stringify(e);
+  }
+};
+
+document.getElementById("createEventBtn").onclick = async () => {
+  const msg = document.getElementById("e_msg");
+  msg.className = "";
+  msg.textContent = "";
+  try{
+    const checked = Array.from(document.querySelectorAll("#usersBox input[type=checkbox]:checked")).map(x=>parseInt(x.value,10));
+    const startLocal = document.getElementById("e_start").value;
+    const endLocal = document.getElementById("e_end").value;
+
+    if (!startLocal) throw {error:"start_time required"};
+    const startSql = startLocal.replace("T"," ") + ":00";
+    const endSql = endLocal ? (endLocal.replace("T"," ") + ":00") : null;
+    if (endSql && endSql <= startSql) throw {error:"end_time start_time dan katta bo‘lishi kerak"};
+
+    const body = {
+      event_name: document.getElementById("e_name").value.trim(),
+      start_time: startSql,
+      end_time: endSql,
+      location: document.getElementById("e_loc").value.trim(),
+      agenda: document.getElementById("e_agenda").value.trim(),
+      participants: checked
+    };
+    const r = await api("/admin/create_event", {method:"POST", body});
+    msg.className = "ok";
+    msg.textContent = "OK. event_id=" + r.event_id;
+    dlgEvent.close();
+    await refreshCalendar();
+  }catch(e){
+    msg.className = "err";
+    msg.textContent = e.error ? (e.error + (e.message ? ("\n" + e.message) : "")) : JSON.stringify(e);
+  }
+};
+
+let calendar;
+document.addEventListener("DOMContentLoaded", async () => {
+  const calEl = document.getElementById("calendar");
+
+  // Render calendar immediately (even if API fails)
+  calendar = new FullCalendar.Calendar(calEl, {
+    initialView: "dayGridMonth",
+    height: "auto",
+    eventClick: async (info) => {
+      selectedEventId = info.event.id;
+      document.getElementById("btnDetail").disabled = false;
+      // quick open detail modal
+      await showEventDetail(selectedEventId);
+      dlgDetail.showModal();
+    }
+  });
+  calendar.render();
+
+  await refreshCalendar();
+});
+</script>
+</body>
+</html>

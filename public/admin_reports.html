@@ -1,0 +1,51 @@
+\
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Reports</title>
+  <style>
+    body{font-family:Arial,sans-serif; max-width:900px; margin:20px auto; padding:0 14px;}
+    .card{border:1px solid #ddd; border-radius:12px; padding:12px; margin-top:14px;}
+    input{padding:10px; width:220px;}
+    button{padding:10px 14px; cursor:pointer;}
+    pre{white-space:pre-wrap;}
+    .muted{color:#666;}
+  </style>
+</head>
+<body>
+  <h2>Admin Reports</h2>
+  <div class="muted"><a href="admin.html">← Admin panel</a></div>
+
+  <div class="card">
+    <h3>Umumiy statistika</h3>
+    <button id="loadOverall">Yuklash</button>
+    <pre id="overall"></pre>
+  </div>
+
+  <div class="card">
+    <h3>Event bo‘yicha (statuslar)</h3>
+    <input id="eventId" placeholder="event_id" />
+    <button id="loadEvent">Yuklash</button>
+    <pre id="eventOut"></pre>
+  </div>
+
+<script src="assets/app.js"></script>
+<script>
+requireLogin("admin");
+function pretty(x){ return JSON.stringify(x, null, 2); }
+
+document.getElementById("loadOverall").onclick = async () => {
+  const r = await api("/admin/report");
+  document.getElementById("overall").textContent = pretty(r);
+};
+
+document.getElementById("loadEvent").onclick = async () => {
+  const id = document.getElementById("eventId").value.trim();
+  const r = await api("/admin/report?event_id=" + encodeURIComponent(id));
+  document.getElementById("eventOut").textContent = pretty(r);
+};
+</script>
+</body>
+</html>

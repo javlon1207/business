@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login</title>
+  <style>
+    body{font-family:Arial, sans-serif; max-width:520px; margin:40px auto; padding:0 16px;}
+    .card{border:1px solid #ddd; border-radius:12px; padding:16px;}
+    label{display:block; margin-top:10px;}
+    input{width:100%; padding:10px; margin-top:6px;}
+    button{margin-top:14px; padding:10px 14px; cursor:pointer;}
+    .err{color:#b00020; margin-top:10px; white-space:pre-wrap;}
+  </style>
+</head>
+<body>
+  <h2>Business Calendar — Login</h2>
+  <div class="card">
+    <label>Email</label>
+    <input id="email" placeholder="admin@local" />
+    <label>Password</label>
+    <input id="password" type="password" placeholder="123" />
+    <button id="btn">Kirish</button>
+    <div id="err" class="err"></div>
+  </div>
+
+  <!-- 1) avval app.js -->
+  <script src="assets/app.js?v=99"></script>
+
+  <!-- 2) keyin login JS -->
+  <script>
+    document.getElementById("btn").addEventListener("click", async () => {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const err = document.getElementById("err");
+
+      err.textContent = "";
+
+      try {
+        const r = await api("/auth/login", {
+          method: "POST",
+          body: { email, password }
+        });
+
+        setToken(r.token);
+        setUser(r.user);
+
+        window.location.href =
+          r.user.role === "admin"
+            ? "/public/admin.html"
+            : "/public/user.html";
+
+      } catch (e) {
+        err.textContent = e?.error || e?.message || "Login xatosi";
+      }
+    });
+  </script>
+</body>
+</html>
